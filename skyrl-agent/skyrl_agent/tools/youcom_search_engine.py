@@ -1,11 +1,15 @@
 from skyrl_agent.tools.base import BaseTool, register_tool, json_loads
 from importlib.metadata import version
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Union
+from functools import partial
+from typing import Optional, Union
 import requests
 import os
 import logging
+
+from skyrl_agent.tools import net_metrics
 
 
 try:
@@ -93,12 +97,14 @@ class YouComSearchEngine(BaseTool):
                 filtered_pages.append(p)
         return filtered_pages
 
-    def you_search(self, query: str):
+    def you_search(self, query: str, trajectory_id: Optional[str] = None):
         """
         Performs a search using the YouCom API.
 
         Args:
             query (str): The search query string
+            trajectory_id: Optional id of the rollout issuing this request, for
+                traffic instrumentation.
 
         Returns:
             str: Formatted search results or error message
@@ -122,6 +128,8 @@ class YouComSearchEngine(BaseTool):
             "count": 10,
         }
 
+        start = time.time()
+        response = None
         for i in range(5):
             try:
                 response = requests.get(url, headers=headers, params=request_params, timeout=10)
@@ -129,8 +137,28 @@ class YouComSearchEngine(BaseTool):
                 break
             except requests.exceptions.RequestException as re:
                 if i == 4:
+                    net_metrics.log_request(
+                        tool="youcom_search_engine",
+                        trajectory_id=trajectory_id,
+                        kind="query",
+                        target=query,
+                        method="GET",
+                        elapsed_s=time.time() - start,
+                        status=None,
+                    )
                     return f"YouSearchEngine search encountered error {re} for query '{query}'."
                 continue
+
+        net_metrics.log_request(
+            tool="youcom_search_engine",
+            trajectory_id=trajectory_id,
+            kind="query",
+            target=query,
+            method="GET",
+            bytes_in=len(response.content),
+            elapsed_s=time.time() - start,
+            status=response.status_code,
+        )
 
         if response.status_code != 200:
             return f"Search API error: {response.status_code} - {response.text}"
@@ -235,10 +263,11 @@ class YouComSearchEngine(BaseTool):
             }
 
         query = params.get("query")
+        trajectory_id = kwargs.get("trajectory_id")
 
         try:
             with ThreadPoolExecutor(max_workers=3) as executor:
-                response = list(executor.map(self.you_search, query))
+                response = list(executor.map(partial(self.you_search, trajectory_id=trajectory_id), query))
             response = "\n=======\n".join(response)
             return {"results": response}
 

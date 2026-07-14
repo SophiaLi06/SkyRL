@@ -1,9 +1,13 @@
 from skyrl_agent.tools.base import BaseTool, register_tool, json_loads
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Union
+from functools import partial
+from typing import Optional, Union
 import requests
 import os
+
+from skyrl_agent.tools import net_metrics
 
 
 @register_tool("search_engine")
@@ -52,12 +56,14 @@ class SearchEngine(BaseTool):
     blocklist_domains = {d.strip().lower() for d in _default_block_domains.split(",") if d.strip()}
     blocklist_keywords = {k.strip().lower() for k in _default_block_keywords.split(",") if k.strip()}
 
-    def google_search(self, query: str):
+    def google_search(self, query: str, trajectory_id: Optional[str] = None):
         """
         Performs a Google search using the Serper API.
 
         Args:
             query (str): The search query string
+            trajectory_id: Optional id of the rollout issuing this request, for
+                traffic instrumentation.
 
         Returns:
             str: Formatted search results or error message
@@ -83,16 +89,41 @@ class SearchEngine(BaseTool):
                 "page": 1,
             },
         }
+        payload = json.dumps(data)
 
+        start = time.time()
+        response = None
         for i in range(5):
             try:
-                response = requests.post(url, headers=headers, data=json.dumps(data), timeout=10)
+                response = requests.post(url, headers=headers, data=payload, timeout=10)
                 results = response.json()
                 break
             except Exception:
                 if i == 4:
+                    net_metrics.log_request(
+                        tool="search_engine",
+                        trajectory_id=trajectory_id,
+                        kind="query",
+                        target=query,
+                        method="POST",
+                        bytes_out=len(payload),
+                        elapsed_s=time.time() - start,
+                        status=None,
+                    )
                     return f"Google search timeout for query '{query}'. Please try again later."
                 continue
+
+        net_metrics.log_request(
+            tool="search_engine",
+            trajectory_id=trajectory_id,
+            kind="query",
+            target=query,
+            method="POST",
+            bytes_out=len(payload),
+            bytes_in=len(response.content),
+            elapsed_s=time.time() - start,
+            status=response.status_code,
+        )
 
         if response.status_code != 200:
             return f"Search API error: {response.status_code} - {response.text}"
@@ -217,13 +248,14 @@ class SearchEngine(BaseTool):
             }
 
         query = params.get("query")
+        trajectory_id = kwargs.get("trajectory_id")
 
         try:
             if isinstance(query, str):
-                response = self.google_search(query)
+                response = self.google_search(query, trajectory_id=trajectory_id)
             elif isinstance(query, list):
                 with ThreadPoolExecutor(max_workers=3) as executor:
-                    response = list(executor.map(self.google_search, query))
+                    response = list(executor.map(partial(self.google_search, trajectory_id=trajectory_id), query))
                 response = "\n=======\n".join(response)
             else:
                 return {"error": "Query must be a string or array of strings."}

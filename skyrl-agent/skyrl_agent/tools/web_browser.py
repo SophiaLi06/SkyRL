@@ -1,5 +1,6 @@
 from skyrl_agent.tools.base import BaseTool, register_tool
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Union
 import requests
@@ -8,6 +9,7 @@ import os
 from openai import OpenAI
 import random
 from skyrl_agent.tools.cache import WebPageCache
+from skyrl_agent.tools import net_metrics
 import copy
 
 
@@ -633,9 +635,21 @@ class WebBrowser(BaseTool):
         for attempt in range(max_attempts):
             # Try cache first (exactly like ASearcher-style persistent LRU)
             content = self._page_cache.get(url)
+            cache_hit = content is not None
             service = "cache" if content else "jina"
+            fetch_start = time.time()
             if not content:
                 content = self.jina_readpage(url)
+            net_metrics.log_request(
+                tool="web_browser",
+                trajectory_id=getattr(self, "_trajectory_id", None),
+                kind="url",
+                target=url,
+                bytes_in=len(content) if content else 0,
+                elapsed_s=time.time() - fetch_start,
+                status="ok" if content and not content.startswith("[visit] Failed") else "error",
+                cache_hit=cache_hit,
+            )
 
             # print(service)
             # print(content)
