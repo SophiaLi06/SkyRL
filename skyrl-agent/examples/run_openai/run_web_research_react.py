@@ -19,6 +19,9 @@ Env vars:
     NET_METRICS_LOG_FILE    Where to append traffic metrics JSONL. Defaults to
                             ./net_metrics.jsonl in the current directory if unset,
                             so this script produces useful data out of the box.
+    WEB_RESEARCH_YAML       Filename (relative to this script's directory) of the
+                            dispatcher/generator config to use (default:
+                            web_research_react.yaml).
 """
 
 import asyncio
@@ -47,7 +50,7 @@ dataset = dataset.select(range(min(num_rows, len(dataset))))
 print(f"Loaded {len(dataset)} rows from {dataset_path}")
 print(dataset[0])
 
-yaml_path = str(Path(__file__).parent / "web_research_react.yaml")
+yaml_path = str(Path(__file__).parent / os.getenv("WEB_RESEARCH_YAML", "web_research_react.yaml"))
 
 agent_generator = AutoAgentRunner.from_task(
     yaml_path,
