@@ -178,7 +178,10 @@ class WebBrowser(BaseTool):
         # Verify required parameters (be tolerant of schema/JSON issues)
         # Capture trajectory id for sticky routing (optional)
         try:
-            self._trajectory_id = kwargs.get("trajectory_id")
+            agent = kwargs.get("agent")
+            self._trajectory_id = (
+                f"{agent.instance_id}-{agent.trajectory_id}" if agent is not None else kwargs.get("trajectory_id")
+            )
         except Exception:
             self._trajectory_id = None
 

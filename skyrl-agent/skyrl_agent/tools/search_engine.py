@@ -248,7 +248,10 @@ class SearchEngine(BaseTool):
             }
 
         query = params.get("query")
-        trajectory_id = kwargs.get("trajectory_id")
+        agent = kwargs.get("agent")
+        trajectory_id = (
+            f"{agent.instance_id}-{agent.trajectory_id}" if agent is not None else kwargs.get("trajectory_id")
+        )
 
         try:
             if isinstance(query, str):
