@@ -18,7 +18,7 @@ class OpenAIBackendConfig(TypedDict):
 
 
 class OpenAIBackend(AsyncInferBackend):
-    def __init__(self, infer_engine: Any, cfg: OpenAIBackendConfig):
+    def __init__(self, infer_engine: Any, cfg: OpenAIBackendConfig, tokenizer: Any = None):
         assert os.environ.get("OPENAI_API_KEY") is not None, "OPENAI_API_KEY is not set"
         self.model_name = cfg["model_name"]
         self.api_url = cfg["api_url"]
