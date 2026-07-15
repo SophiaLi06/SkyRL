@@ -196,7 +196,8 @@ def transitions_to_training_data(
         ob_tokens = transition.ob.input_ids
 
         # Get action tokens and logprobs
-        ac_tokens = transition.ac.token_ids
+        # OpenAIBackend (pure HTTP/text completion, no real token ids) leaves this None
+        ac_tokens = transition.ac.token_ids or []
         ac_logprobs = transition.ac.logprobs or [0.0] * len(ac_tokens)
 
         # Determine delta observation (new tokens not in accumulated sequence)
